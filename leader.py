@@ -1,8 +1,10 @@
 import Pyro4
 import threading
+import time
 
 @Pyro4.expose
-class LeaderBroker:
+
+class LeaderBroker:   
     def __init__(self):
         self.broker_id = 'Leader'
         self.state = 'Leader'
@@ -12,12 +14,80 @@ class LeaderBroker:
         self.quorum_size = 3  # Leader + 2 voters
         self.lock = threading.Lock()  # For thread-safe operations
         self.acknowledgments = {}  # {offset: set(broker_ids)}
-    
+        self.heartbeat_timeout = 10  # seconds
+        self.last_heartbeat = {}  # {broker_id: last_heartbeat_time}
+        # Start a thread to monitor heartbeats
+        threading.Thread(target=self.monitor_heartbeats, daemon=True).start()   
+
+    def heartbeat(self, broker_id):
+        with self.lock:
+            self.last_heartbeat[broker_id] = time.time()
+
+    def monitor_heartbeats(self):
+        while True:
+            time.sleep(self.heartbeat_timeout / 2)
+            with self.lock:
+                current_time = time.time()
+                failed_voters = []
+                for broker_id in list(self.last_heartbeat.keys()):
+                    if current_time - self.last_heartbeat[broker_id] > self.heartbeat_timeout:
+                        print(f"Voter {broker_id} failed (no heartbeat received).")
+                        failed_voters.append(broker_id)
+                for broker_id in failed_voters:
+                    self.handle_voter_failure(broker_id)
+
     def register_broker(self, broker_id, broker_uri, state):
         with self.lock:
             self.brokers[broker_id] = {'reference': broker_uri, 'state': state}
+            if state == 'Voter':
+                self.last_heartbeat[broker_id] = time.time()
         print(f"Broker {broker_id} registered as {state}")
-    
+
+    def notify_voters_about_change(self):
+        for broker_id, info in self.brokers.items():
+            if info['state'] == 'Voter':
+                try:
+                    voter = Pyro4.Proxy(info['reference'])
+                    voter.update_quorum(self.brokers)
+                    print(f"Notified voter {broker_id} about quorum change.")
+                except Exception as e:
+                    print(f"Failed to notify voter {broker_id}: {e}")
+
+
+    def promote_observer_to_voter(self):
+        # Find an observer to promote
+        for broker_id, info in self.brokers.items():
+            if info['state'] == 'Observer':
+                # Update broker state
+                self.brokers[broker_id]['state'] = 'Voter'
+                self.last_heartbeat[broker_id] = time.time()
+                # Notify the observer
+                try:
+                    observer = Pyro4.Proxy(info['reference'])
+                    observer.promote_to_voter()
+                    print(f"Promoted observer {broker_id} to voter.")
+                    # Notify existing voters
+                    self.notify_voters_about_change()
+                    return
+                except Exception as e:
+                    print(f"Failed to promote observer {broker_id}: {e}")
+        print("No observers available to promote.")
+
+
+    def handle_voter_failure(self, broker_id):
+        # Remove the failed voter
+        del self.brokers[broker_id]
+        del self.last_heartbeat[broker_id]
+        print(f"Removed voter {broker_id} due to failure.")
+        # Check if quorum is still met
+        active_voters = [bid for bid, info in self.brokers.items() if info['state'] == 'Voter']
+        quorum_size = len(active_voters) + 1  # +1 for leader
+        required_quorum = (self.quorum_size // 2) + 1
+        if quorum_size < required_quorum:
+            print("Quorum lost. Promoting an observer to voter.")
+            self.promote_observer_to_voter()
+
+        
     def publish(self, message):
         with self.lock:
             offset = len(self.log)
