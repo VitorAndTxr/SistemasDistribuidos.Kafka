@@ -27,7 +27,8 @@ class VoterBroker(BrokerBase):
         threading.Thread(target=self.send_heartbeats, daemon=True).start()
 
         self.request_loop()
-
+        
+    @Pyro4.expose
     def handle_new_data(self):
         threading.Thread(target=self.fetch_and_replicate, daemon=True).start()
 

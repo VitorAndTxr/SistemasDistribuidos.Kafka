@@ -30,6 +30,7 @@ class ObserverBroker(BrokerBase):
         except Pyro4.errors.NamingError:
             return None
 
+    @Pyro4.expose
     def handle_new_data(self):
         threading.Thread(target=self.fetch_and_replicate, daemon=True).start()
 
@@ -52,6 +53,7 @@ class ObserverBroker(BrokerBase):
             self.update_log(data)
             print(f"Observador {self.broker_id} atualizou dados até offset {self.offset - 1}")
 
+    @Pyro4.expose
     def update_role(self, new_role):
         self.state = new_role
         print(f"Broker {self.broker_id} agora é {self.state}.")

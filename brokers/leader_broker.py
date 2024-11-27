@@ -5,7 +5,6 @@ import Pyro4
 import threading
 import time
 
-@Pyro4.expose
 class LeaderBroker(BrokerBase):
     def __init__(self):
         super().__init__()
@@ -14,6 +13,7 @@ class LeaderBroker(BrokerBase):
         self.observers = {}
         self.quorum_size = 3  # Para tolerar 1 falha, precisamos de 3 votantes (2f+1)
         self.acks = {}  # Rastreamento de confirmações dos votantes
+
 
     def start(self):
         self.start_daemon()
@@ -30,9 +30,11 @@ class LeaderBroker(BrokerBase):
 
         self.request_loop()
 
+    @Pyro4.expose
     def get_epoch(self):
         return self.epoch
-
+    
+    @Pyro4.expose
     def register_broker(self, broker_id, broker_uri=None):
 
         if not broker_uri:
@@ -67,6 +69,7 @@ class LeaderBroker(BrokerBase):
             else:
                 print(f"Broker {broker_id} não encontrado.")
 
+    @Pyro4.expose
     def receive_publication(self, data):
         # Recebe dados do publicador
         entry = {
@@ -88,6 +91,7 @@ class LeaderBroker(BrokerBase):
             except Exception as e:
                 print(f"Falha ao notificar votante {broker_id}: {e}")
 
+    @Pyro4.expose
     def receive_ack(self, broker_id, offset):
         # Recebe confirmação do votante
         print(f"Líder recebeu ACK de {broker_id} para offset {offset}")
@@ -98,6 +102,7 @@ class LeaderBroker(BrokerBase):
             print(f"Entrada em offset {offset} consolidada.")
             # Aqui podemos notificar o publicador se necessário
 
+    @Pyro4.expose
     def fetch_data(self, epoch, offset):
         # Enviar dados para o votante
         with self.lock:
@@ -111,6 +116,7 @@ class LeaderBroker(BrokerBase):
                 data = self.log[offset:]
                 return {'data': data}
 
+    @Pyro4.expose
     def heartbeat(self, broker_id):
         # Atualiza o timestamp do heartbeat do votante
         if broker_id in self.voters:
