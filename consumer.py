@@ -1,26 +1,34 @@
+# consumer.py
+
 import Pyro4
 
 def main():
     ns = Pyro4.locateNS()
-    # For simplicity, consumer connects to the leader
-    leader_uri = ns.lookup("Leader-Epoca1")
-    broker = Pyro4.Proxy(leader_uri)
-    start_offset = 0
-    print("Consumer is running. Type 'fetch' to get new messages. Type 'exit' to quit.")
+    leader_uri = None
+    try:
+        leader_uri = ns.lookup("Leader-Epoca1")
+    except Pyro4.errors.NamingError:
+        print("Nenhum líder encontrado. Não é possível consumir dados.")
+        return
+    leader = Pyro4.Proxy(leader_uri)
+
+    # Consumidor irá buscar dados a partir do offset 0
+    offset = 0
+    print("Consumidor iniciado.")
     while True:
-        cmd = input("Enter command: ")
-        if cmd.lower() == 'exit':
-            break
-        elif cmd.lower() == 'fetch':
-            messages = broker.consume(start_offset)
-            if messages:
-                for msg in messages:
-                    print(f"Offset {msg['offset']}: {msg['message']} (Epoch {msg['epoch']})")
-                start_offset = messages[-1]['offset'] + 1
-            else:
-                print("No new messages.")
+        input("Pressione Enter para buscar novas mensagens...")
+        epoch = leader.get_epoch()
+        response = leader.fetch_data(epoch, offset)
+        if 'error' in response:
+            print(f"Erro ao buscar dados: {response['error']}")
         else:
-            print("Unknown command.")
+            data = response['data']
+            if data:
+                for entry in data:
+                    print(f"Offset {entry['offset']}: {entry['data']}")
+                offset = data[-1]['offset'] + 1
+            else:
+                print("Sem novas mensagens.")
 
 if __name__ == "__main__":
     main()
