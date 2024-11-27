@@ -16,26 +16,39 @@ def main():
         leader_uri = ns.lookup("Leader-Epoca1")
         # Existe um líder, registrar-se com ele
         # Inicialmente, criar um votante
-
         
         print("Lider encontrado. Iniciando Broker.")
-        brokerBase = BrokerBase()
-        registeredBroker = brokerBase.start()
 
-        if registeredBroker['role'] == 'Voter':
-            
-            broker = VoterBroker(registeredBroker['broker_id'])
-            broker.start()
-        else:
-            broker = ObserverBroker(registeredBroker['broker_id'])
-            broker.start()
-            broker = VoterBroker(registeredBroker['broker_id'])
-            broker.start()
+        initialize_broker()
+
     except Pyro4.errors.NamingError:
         # Não existe líder, tornar-se o líder
+        
         print("Nenhum líder encontrado. Iniciando líder.")
-        broker = LeaderBroker()
-        broker.start()
+
+        initialize_leader()
+
+def initialize_leader():
+    broker = LeaderBroker()
+    broker.start()
+
+def initialize_broker():
+    brokerBase = BrokerBase()
+    registeredBroker = brokerBase.start()
+
+    if registeredBroker['role'] == 'Voter': 
+        initiate_voter(registeredBroker)
+    else:
+        initiate_observer(registeredBroker)
+
+def initiate_observer(registeredBroker):
+    broker = ObserverBroker(registeredBroker['broker_id'])
+    broker.start()
+    initiate_voter(registeredBroker)
+
+def initiate_voter(registeredBroker):
+    broker = VoterBroker(registeredBroker['broker_id'])
+    broker.start()
 
 if __name__ == "__main__":
     main()
