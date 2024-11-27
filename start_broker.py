@@ -11,13 +11,19 @@ def main():
     # Verificar se o líder está registrado
     ns = Pyro4.locateNS()
     try:
+        print("Buscando líder...")
+
         leader_uri = ns.lookup("Leader-Epoca1")
         # Existe um líder, registrar-se com ele
         # Inicialmente, criar um votante
+
+        
+        print("Lider encontrado. Iniciando Broker.")
         brokerBase = BrokerBase()
         registeredBroker = brokerBase.start()
 
         if registeredBroker['role'] == 'Voter':
+            
             broker = VoterBroker(registeredBroker['broker_id'])
             broker.start()
         else:
@@ -27,6 +33,7 @@ def main():
             broker.start()
     except Pyro4.errors.NamingError:
         # Não existe líder, tornar-se o líder
+        print("Nenhum líder encontrado. Iniciando líder.")
         broker = LeaderBroker()
         broker.start()
 
