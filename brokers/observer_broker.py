@@ -14,11 +14,10 @@ class ObserverBroker(BrokerBase):
 
     def start(self):
         self.start_daemon()
-        leader_uri = self.check_leader()
-        if leader_uri is None:
-            print("Nenhum líder encontrado. Não é possível iniciar observador sem líder.")
+        self.register_leader()
+        if self.leader is None:
+            print("Nenhum líder encontrado. Não é possível Votante")
             return
-        self.leader = Pyro4.Proxy(leader_uri)
         # Registrar-se com o líder
         self.leader.register_broker(self.broker_id, self.uri)
         print(f"Registrado com o líder como {self.state}.")

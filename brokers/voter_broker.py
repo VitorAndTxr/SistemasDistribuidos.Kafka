@@ -15,11 +15,10 @@ class VoterBroker(BrokerBase):
 
     def start(self):
         self.start_daemon()
-        leader_uri = self.check_leader()
-        if leader_uri is None:
-            print("Nenhum líder encontrado. Não é possível iniciar votante sem líder.")
+        self.register_leader()
+        if self.leader is None:
+            print("Nenhum líder encontrado. Não é possível Votante")
             return
-        self.leader = Pyro4.Proxy(leader_uri)
         # Registrar-se com o líder
         self.leader.register_broker(self.broker_id, self.uri)
         print(f"Registrado com o líder como {self.state}.")
@@ -28,12 +27,6 @@ class VoterBroker(BrokerBase):
         threading.Thread(target=self.send_heartbeats, daemon=True).start()
 
         self.request_loop()
-
-    def check_leader(self):
-        try:
-            return self.ns.lookup("Leader-Epoca1")
-        except Pyro4.errors.NamingError:
-            return None
 
     def handle_new_data(self):
         threading.Thread(target=self.fetch_and_replicate, daemon=True).start()

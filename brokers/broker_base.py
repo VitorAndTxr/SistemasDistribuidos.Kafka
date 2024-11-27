@@ -46,14 +46,17 @@ class BrokerBase:
     # Métodos que serão sobrescritos ou estendidos pelas subclasses
     def start(self):
         self.start_daemon()
-        leader_uri = self.ns.lookup("Leader-Epoca1")
-        self.leader = Pyro4.Proxy(leader_uri)
+        self.register_leader()
         role = self.leader.register_broker(self.broker_id)
 
         return {
             "role": role,
             "broker_id": self.broker_id
         }
+
+    def register_leader(self):
+        leader_uri = self.ns.lookup("Leader-Epoca1")
+        self.leader = Pyro4.Proxy(leader_uri)
 
 
     def handle_new_data(self):
