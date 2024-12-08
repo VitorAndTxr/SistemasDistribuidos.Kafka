@@ -18,7 +18,7 @@ def main():
     while True:
         input("Pressione Enter para buscar novas mensagens...")
         epoch = leader.get_epoch()
-        response = leader.fetch_data(epoch, offset)
+        response = leader.get_data(epoch, offset)
         if 'error' in response:
             print(f"Erro ao buscar dados: {response['error']}")
         else:

@@ -48,9 +48,22 @@ class ObserverBroker(BrokerBase):
             # Tentar novamente
             self.fetch_and_replicate()
         else:
-            data = response['data']
-            self.update_log(data)
-            print(f"Observador {self.broker_id} atualizou dados até offset {self.offset - 1}")
+            committed_data = response['commited']
+            uncommitted_data = response['uncommited']
+
+            # Enviar ACKs
+            
+            if(len(committed_data) > 0):
+                self.update_log(committed_data)
+                for entry in committed_data:
+                    self.leader.receive_ack(self.broker_id, entry['offset'])
+
+            if(len(uncommitted_data) > 0):
+                self.update_uncommited_log(uncommitted_data)
+                for entry in uncommitted_data:
+                    self.leader.receive_ack(self.broker_id, entry['offset'])
+
+            print(f"Obser {self.broker_id} replicou dados até offset {len(self.log)+len(self.uncommited_log) - 1}")
 
     @Pyro4.expose
     def update_role(self, new_role):

@@ -29,11 +29,17 @@ class VoterBroker(BrokerBase):
 
     @Pyro4.expose
     def handle_new_data(self):
+        print(f"Solicitando novo fetch de dados.")
         threading.Thread(target=self.fetch_and_replicate, daemon=True).start()
+
+    @Pyro4.expose
+    def consolidate_log(self, offset):
+        self.commit_log_by_offset(offset)
 
     def fetch_and_replicate(self):
         fetch_epoch = self.get_last_epoch()
         fetch_offset = self.get_offset()
+        print(f"Fetching data from epoch {fetch_epoch}, offset {fetch_offset}")
         response = self.leader.fetch_data(fetch_epoch, fetch_offset)
         if 'error' in response:
             print(f"Inconsistência detectada: {response['error']}")
@@ -41,17 +47,30 @@ class VoterBroker(BrokerBase):
             max_offset = response.get('max_offset', fetch_offset)
             # Truncar log
             with self.lock:
+                print(f"Truncando log até offset {max_offset} e epoch {max_epoch}")
                 self.log = self.log[:max_offset + 1]
                 self.epoch = max_epoch
             # Tentar novamente
+            print("Tentando buscar e replicar novamente após truncar log")
             self.fetch_and_replicate()
         else:
-            data = response['data']
-            self.update_log(data)
+            committed_data = response['commited']
+            uncommitted_data = response['uncommited']
+            print(f"Dados recebidos: {response}")
             # Enviar ACKs
-            for entry in data:
-                self.leader.receive_ack(self.broker_id, entry['offset'])
-            print(f"Votante {self.broker_id} replicou dados até offset {self.offset - 1}")
+            if len(committed_data) > 0:
+                for entry in committed_data:
+                    self.update_log(entry)
+                    self.leader.receive_ack(self.broker_id, entry['offset'])
+                    print(f"ACK enviado para offset {entry['offset']}")
+
+            if len(uncommitted_data) > 0:
+                for entry in uncommitted_data:
+                    self.update_uncommited_log(entry)
+                    self.leader.receive_ack(self.broker_id, entry['offset'])
+                    print(f"ACK enviado para offset {entry['offset']}")
+
+            print(f"Votante {self.broker_id} replicou dados até offset {len(self.log) + len(self.uncommited_log) - 1}")
 
     def send_heartbeats(self):
         while True:
@@ -64,3 +83,16 @@ class VoterBroker(BrokerBase):
     def update_role(self, new_role):
         self.state = new_role
         print(f"Broker {self.broker_id} agora é {self.state}.")
+
+    def commit_log(self):
+        with self.lock:
+            for entry in self.log:
+                if not entry['committed']:
+                    # Execute o commit da entrada do log
+                    self.commit_entry(entry)
+                    entry['committed'] = True
+            print(f"Votante {self.broker_id} comitou todas as entradas do log.")
+
+    def commit_entry(self, entry):
+        # Lógica para executar o commit da entrada do log
+        print(f"Comitando entrada: {entry}")

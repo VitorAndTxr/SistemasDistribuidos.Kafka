@@ -9,7 +9,6 @@ class LeaderBroker(BrokerBase):
     def __init__(self):
         super().__init__()
         self.state = 'Leader'
-        self.commited_log = []
         self.voters = {}
         self.observers = {}
         self.quorum_size = 3  # Para tolerar 1 falha, precisamos de 3 votantes (2f+1)
@@ -73,14 +72,14 @@ class LeaderBroker(BrokerBase):
     @Pyro4.expose
     def receive_publication(self, data):
         # Recebe dados do publicador
-        entry = {
-            'epoch': self.epoch,
-            'offset': len(self.log),
-            'data': data
-        }
-        self.log.append(entry)
-        self.offset += 1
-        print(f"Líder recebeu publicação: {data}")
+        with self.lock:
+            entry = {
+                'epoch': self.epoch,
+                'offset': len(self.log) + len(self.uncommited_log),
+                'data': data
+            }
+            self.uncommited_log.append(entry)
+            print(f"Líder recebeu publicação: {data}")
         # Notificar votantes
         self.notify_voters()
 
@@ -92,6 +91,14 @@ class LeaderBroker(BrokerBase):
             except Exception as e:
                 print(f"Falha ao notificar votante {broker_id}: {e}")
 
+    def notify_voters_about_commit(self, offset):
+        for broker_id, info in self.voters.items():
+            try:
+                voter = Pyro4.Proxy(info['uri'])
+                voter.consolidate_log(offset)
+            except Exception as e:
+                print(f"Falha ao notificar votante {broker_id} sobre consolidação: {e}")
+
     @Pyro4.expose
     def receive_ack(self, broker_id, offset):
         # Recebe confirmação do votante
@@ -101,8 +108,35 @@ class LeaderBroker(BrokerBase):
             self.acks[offset] = set()
         self.acks[offset].add(broker_id)
         
-        if len(self.acks[offset]) >= (self.quorum_size // 2) + 1:
-            print(f"Entrada em offset {offset} consolidada.")
+        if len(self.acks[offset]) + 1 >= (self.quorum_size // 2) + 1:
+            print(f"Consolidando.")
+
+            commited = self.commit_log_by_offset(offset)
+
+            if commited:
+                print(f"notificando votantes sobre consolidação.")
+                self.notify_voters_about_commit(offset)
+                print(f"Entrada em offset {offset} consolidada.")
+            else:
+                print(f"Offset já consolidado{offset}.")
+
+    @Pyro4.expose
+    def get_data(self, epoch, offset):
+        # Enviar dados para o votante
+        with self.lock:
+            if epoch != self.epoch or offset > self.offset:
+                return {
+                    'error': 'Inconsistência de epoch ou offset',
+                    'max_epoch': self.epoch,
+                    'max_offset': self.offset - 1
+                }
+            else:
+                commited_log = self.log[offset:]
+                
+                return {
+                    'data': commited_log
+                    }
+
 
     @Pyro4.expose
     def fetch_data(self, epoch, offset):
@@ -115,9 +149,12 @@ class LeaderBroker(BrokerBase):
                     'max_offset': self.offset - 1
                 }
             else:
-                data = self.log[offset:]
+                commited_log = self.log[offset:]
                 
-                return {'data': data}
+                return {
+                    'commited': commited_log,
+                    'uncommited': self.uncommited_log
+                    }
 
     @Pyro4.expose
     def heartbeat(self, broker_id):

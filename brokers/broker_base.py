@@ -11,6 +11,7 @@ class BrokerBase:
         self.broker_id = str(uuid.uuid4())
         self.state = None  # Será definido como 'Leader', 'Voter' ou 'Observer'
         self.log = []
+        self.uncommited_log = []
         self.leader = None
         self.daemon = None
         self.ns = None
@@ -28,9 +29,36 @@ class BrokerBase:
         self.daemon.requestLoop()
 
     def update_log(self, entries):
+        print(f"update_log")
         with self.lock:
-            self.log.extend(entries)
+            self.log.append(entries)
+            print(f"{self.log}")
             self.offset = len(self.log)
+        print(f"self.log: {self.log}")
+        print(f"self.uncommited_log: {self.uncommited_log}")
+        print(f"offset:{self.offset}")
+
+    def update_uncommited_log(self, entries):
+        print(f"update_uncommited_log")
+        with self.lock:
+            self.uncommited_log.append(entries)
+        print(f"self.log: {self.log}")
+        print(f"self.uncommited_log: {self.uncommited_log}")
+        print(f"offset:{self.offset}")
+        
+
+    def commit_log_by_offset(self, offset):
+        print(f"commit_log_by_offset")   
+        commited_entry = next((entry for entry in self.uncommited_log if entry['offset'] == offset), None)
+        if commited_entry:
+            print(f"commited_entry:{commited_entry}")   
+            with self.lock:
+                self.uncommited_log = [entry for entry in self.uncommited_log if entry['offset'] != offset]
+            self.update_log(commited_entry)
+            return True
+        return False
+
+
 
     def get_last_epoch(self):
         with self.lock:
