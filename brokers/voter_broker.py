@@ -5,7 +5,6 @@ import Pyro4
 import threading
 import time
 
-@Pyro4.expose
 class VoterBroker(BrokerBase):
     def __init__(self, broker_id):
         super().__init__()
@@ -27,7 +26,7 @@ class VoterBroker(BrokerBase):
         threading.Thread(target=self.send_heartbeats, daemon=True).start()
 
         self.request_loop()
-        
+
     @Pyro4.expose
     def handle_new_data(self):
         threading.Thread(target=self.fetch_and_replicate, daemon=True).start()

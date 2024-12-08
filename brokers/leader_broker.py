@@ -9,6 +9,7 @@ class LeaderBroker(BrokerBase):
     def __init__(self):
         super().__init__()
         self.state = 'Leader'
+        self.commited_log = []
         self.voters = {}
         self.observers = {}
         self.quorum_size = 3  # Para tolerar 1 falha, precisamos de 3 votantes (2f+1)
@@ -41,7 +42,7 @@ class LeaderBroker(BrokerBase):
 
             print(f"Broker {broker_id} solicitou registro.")
 
-            if len(self.voters) < self.quorum_size:
+            if len(self.voters) < self.quorum_size - 1:
                 self.voters[broker_id] = {
                     'uri': '',
                     'last_heartbeat': time.time()
@@ -95,12 +96,13 @@ class LeaderBroker(BrokerBase):
     def receive_ack(self, broker_id, offset):
         # Recebe confirmação do votante
         print(f"Líder recebeu ACK de {broker_id} para offset {offset}")
+
         if offset not in self.acks:
             self.acks[offset] = set()
         self.acks[offset].add(broker_id)
+        
         if len(self.acks[offset]) >= (self.quorum_size // 2) + 1:
             print(f"Entrada em offset {offset} consolidada.")
-            # Aqui podemos notificar o publicador se necessário
 
     @Pyro4.expose
     def fetch_data(self, epoch, offset):
@@ -114,6 +116,7 @@ class LeaderBroker(BrokerBase):
                 }
             else:
                 data = self.log[offset:]
+                
                 return {'data': data}
 
     @Pyro4.expose

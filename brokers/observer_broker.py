@@ -5,7 +5,6 @@ from .broker_base import BrokerBase
 import Pyro4
 import threading
 
-@Pyro4.expose
 class ObserverBroker(BrokerBase):
     def __init__(self, broker_id):
         super().__init__()
