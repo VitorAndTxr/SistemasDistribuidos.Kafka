@@ -5,7 +5,6 @@ import threading
 import time
 import uuid
 
-@Pyro4.expose
 class BrokerBase:
     def __init__(self):
         self.broker_id = str(uuid.uuid4())

@@ -83,16 +83,3 @@ class VoterBroker(BrokerBase):
     def update_role(self, new_role):
         self.state = new_role
         print(f"Broker {self.broker_id} agora é {self.state}.")
-
-    def commit_log(self):
-        with self.lock:
-            for entry in self.log:
-                if not entry['committed']:
-                    # Execute o commit da entrada do log
-                    self.commit_entry(entry)
-                    entry['committed'] = True
-            print(f"Votante {self.broker_id} comitou todas as entradas do log.")
-
-    def commit_entry(self, entry):
-        # Lógica para executar o commit da entrada do log
-        print(f"Comitando entrada: {entry}")
